@@ -1,6 +1,8 @@
 #include "SurfaceView.h"
 #include "TimeAxisFormatter.h"
-#include <QVBoxLayout>
+#include "ColorBar.h"
+#include "ColorMap.h"
+#include <QHBoxLayout>
 #include <QLinearGradient>
 #include <QWheelEvent>
 #include <cmath>
@@ -15,9 +17,13 @@ SurfaceView::SurfaceView(QWidget *parent)
     container->setMinimumSize(640, 480);
     container->setFocusPolicy(Qt::StrongFocus);
 
-    auto *lay = new QVBoxLayout(this);
+    colorBar_ = new ColorBar(this);
+
+    auto *lay = new QHBoxLayout(this);
     lay->setMargin(0);
-    lay->addWidget(container);
+    lay->setSpacing(4);
+    lay->addWidget(container, 1);
+    lay->addWidget(colorBar_);
 
     // 坐标轴（所有权交给 graph）
     axisDepth_ = new QValue3DAxis;
@@ -42,12 +48,7 @@ SurfaceView::SurfaceView(QWidget *parent)
     series_->setFlatShadingEnabled(true);          // 平面着色计算量小，无独显时更流畅
 
     QLinearGradient jet;
-    jet.setColorAt(0.000, QColor(0, 0, 128));
-    jet.setColorAt(0.125, QColor(0, 0, 255));
-    jet.setColorAt(0.375, QColor(0, 255, 255));
-    jet.setColorAt(0.625, QColor(255, 255, 0));
-    jet.setColorAt(0.875, QColor(255, 0, 0));
-    jet.setColorAt(1.000, QColor(128, 0, 0));
+    jet.setStops(jetStops());
     series_->setBaseGradient(jet);
     series_->setColorStyle(Q3DTheme::ColorStyleRangeGradient);
     graph_->addSeries(series_);
@@ -73,8 +74,12 @@ void SurfaceView::applyConfig(const ViewConfig &cfg)
     axisDepth_->setTitle(cfg_.depthTitle);
     axisTemp_->setTitle(cfg_.tempTitle);
     axisTime_->setTitle(cfg_.timeTitle);
-    if (!cfg_.autoTemp)
+    colorBar_->setTitle(cfg_.tempTitle);
+    colorBar_->setVisible(cfg_.showColorBar);
+    if (!cfg_.autoTemp) {
         axisTemp_->setRange(float(cfg_.tempMin), float(cfg_.tempMax));
+        colorBar_->setRange(cfg_.tempMin, cfg_.tempMax);
+    }
     // 时间格式变化时重建 formatter
     setBaseTimeMs(baseMs_);
 }
@@ -110,6 +115,7 @@ void SurfaceView::setGrid(const Grid &g)
         const float lo = std::floor((g.vmin - 2.0f) / 5.0f) * 5.0f;
         const float hi = std::ceil ((g.vmax + 2.0f) / 5.0f) * 5.0f;
         axisTemp_->setRange(lo, hi);
+        colorBar_->setRange(lo, hi);          // 色带跟随实际的颜色映射范围
     }
 
     proxy_->resetArray(arr);    // proxy 接管 arr
@@ -119,6 +125,17 @@ void SurfaceView::setGrid(const Grid &g)
     ignoreSel_ = true;
     series_->setSelectedPoint(QSurface3DSeries::invalidSelectionPosition());
     ignoreSel_ = false;
+}
+
+void SurfaceView::setColorBarVisible(bool visible)
+{
+    cfg_.showColorBar = visible;
+    colorBar_->setVisible(visible);
+}
+
+QPixmap SurfaceView::grabColorBar() const
+{
+    return colorBar_->isVisible() ? colorBar_->grab() : QPixmap();
 }
 
 QImage SurfaceView::renderImage(const QSize &size, int msaaSamples)
@@ -151,21 +168,14 @@ bool SurfaceView::eventFilter(QObject *obj, QEvent *ev)
         const Qt::KeyboardModifiers m = we->modifiers();
         const bool shift = m & Qt::ShiftModifier;
         const bool ctrl  = m & Qt::ControlModifier;
-        const bool alt   = m & Qt::AltModifier;
         if (shift || ctrl) {
             // 个别平台按住 Shift 滚轮会变成横向滚动，这里两个方向都取
             int dy = we->angleDelta().y();
             if (dy == 0)
                 dy = we->angleDelta().x();
-            if (dy != 0) {
-                const bool up = dy > 0;
-                if (alt)
-                    emit navRequested(ctrl ? NavAction::PanTime : NavAction::PanDepth,
-                                      up ? -0.2 : 0.2);          // 向上滚：向浅处/较早时间
-                else
-                    emit navRequested(ctrl ? NavAction::ZoomTime : NavAction::ZoomDepth,
-                                      up ? 0.8 : 1.25);          // 向上滚：放大（范围变小）
-            }
+            if (dy != 0)
+                emit navRequested(ctrl ? NavAction::ZoomTime : NavAction::ZoomDepth,
+                                  dy > 0 ? 0.8 : 1.25);          // 向上滚：放大（范围变小）
             return true;                                         // 吃掉，不再触发视角缩放
         }
     }

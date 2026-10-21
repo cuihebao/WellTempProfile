@@ -14,6 +14,7 @@ SOURCES += \
     FrameBuffer.cpp \
     Resampler.cpp \
     DataExporter.cpp \
+    ColorBar.cpp \
     DataSimulator.cpp
 
 HEADERS += \
@@ -24,4 +25,6 @@ HEADERS += \
     FrameBuffer.h \
     Resampler.h \
     DataExporter.h \
+    ColorBar.h \
+    ColorMap.h \
     DataSimulator.h

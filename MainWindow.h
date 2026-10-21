@@ -45,11 +45,9 @@ private:
     double fullDepthMax() const { return depth_.start + depth_.step * (depth_.count - 1); }
     void applyDepthRange(double lo, double hi);
     void zoomDepth(double factor);
-    void panDepth(double fraction);
     bool currentTimeRange(qint64 *t0, qint64 *t1) const;
     void applyTimeRange(qint64 t0, qint64 t1);
     void zoomTime(double factor);
-    void panTime(double fraction);
 
     void updateRetention();
     void syncFollowButton();

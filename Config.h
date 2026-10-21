@@ -33,6 +33,8 @@ struct ViewConfig {
     int    retainSec    = 1800; // 内存中至少保留多少秒的原始帧（用于缩小窗口后再放大）
     int    maxRetainSec = 7200; // 保留时间上限（冻结视图/放大时间范围时受此限制），按 5 km 约 50 KB/帧估算
 
+    bool   showColorBar = true; // 是否显示右侧色带
+
     bool   autoTemp  = false;   // 温度轴/色带范围：自动 or 固定
     double tempMin   = -20.0;
     double tempMax   = 60.0;

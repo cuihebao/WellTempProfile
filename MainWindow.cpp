@@ -2,6 +2,7 @@
 #include "DataSimulator.h"
 #include "DataExporter.h"
 #include <QtConcurrent>
+#include <QCheckBox>
 #include <QDateTime>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
@@ -76,6 +77,11 @@ MainWindow::MainWindow(QWidget *parent)
     auto *resetDepthBtn = new QPushButton(QObject::tr("重置深度"), central);
     bar->addWidget(resetDepthBtn);
 
+    bar->addSpacing(16);
+    auto *colorBarChk = new QCheckBox(QObject::tr("显示色带"), central);
+    colorBarChk->setChecked(cfg_.showColorBar);
+    bar->addWidget(colorBarChk);
+
     bar->addStretch(1);
     auto *imgBtn = new QPushButton(QObject::tr("导出图片"), central);
     bar->addWidget(imgBtn);
@@ -94,7 +100,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     auto *hint = new QLabel(QObject::tr(
         "左键拖动：旋转　滚轮：缩放视角　Shift+滚轮：缩放井深范围　Ctrl+滚轮：缩放时间范围　"
-        "再按住 Alt：平移（滚轮向上＝向浅处/较早时间）　缩放以最近点选的点为中心"), central);
+        "范围缩放以最近点选的点为中心；要移动范围请用上方井深输入框，或取消“跟随最新”后缩放时间"), central);
     hint->setStyleSheet(QStringLiteral("color: gray;"));
     hint->setWordWrap(true);
     vbox->addWidget(hint);
@@ -134,6 +140,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(resetDepthBtn, &QPushButton::clicked, this, &MainWindow::onResetDepth);
     connect(followBtn_, &QPushButton::toggled, this, &MainWindow::onFollowToggled);
     connect(imgBtn, &QPushButton::clicked, this, &MainWindow::exportImage);
+    connect(colorBarChk, &QCheckBox::toggled, this, [this](bool on) {
+        cfg_.showColorBar = on;
+        view_->setColorBarVisible(on);
+    });
 
     connect(view_, &SurfaceView::navRequested, this, &MainWindow::onNavRequested);
     connect(view_, &SurfaceView::pointPicked, this, &MainWindow::onPointPicked);
@@ -282,12 +292,6 @@ void MainWindow::zoomDepth(double f)
     applyDepthRange(c - (c - lo) * f, c + (hi - c) * f);
 }
 
-void MainWindow::panDepth(double fraction)
-{
-    const double shift = (cfg_.depthMax - cfg_.depthMin) * fraction;
-    applyDepthRange(cfg_.depthMin + shift, cfg_.depthMax + shift);
-}
-
 // ====================== 时间范围 ======================
 
 bool MainWindow::currentTimeRange(qint64 *t0, qint64 *t1) const
@@ -344,15 +348,6 @@ void MainWindow::zoomTime(double f)
     applyTimeRange(c - qint64((c - t0) * f), c + qint64((t1 - c) * f));
 }
 
-void MainWindow::panTime(double fraction)
-{
-    qint64 t0, t1;
-    if (!currentTimeRange(&t0, &t1))
-        return;
-    const qint64 shift = qint64((t1 - t0) * fraction);
-    applyTimeRange(t0 + shift, t1 + shift);
-}
-
 void MainWindow::onWindowSecChanged(int sec)
 {
     // 手动输入窗口长度 = 回到“最近 N 秒”的滚动模式
@@ -391,9 +386,7 @@ void MainWindow::onNavRequested(SurfaceView::NavAction a, double amount)
 {
     switch (a) {
     case SurfaceView::NavAction::ZoomDepth: zoomDepth(amount); break;
-    case SurfaceView::NavAction::PanDepth:  panDepth(amount);  break;
     case SurfaceView::NavAction::ZoomTime:  zoomTime(amount);  break;
-    case SurfaceView::NavAction::PanTime:   panTime(amount);   break;
     }
 }
 
@@ -424,9 +417,16 @@ void MainWindow::exportImage()
         return;
     }
 
+    // 色带（显示时）拼在曲面右侧，高度对齐
+    QImage cbImg;
+    const QPixmap cbPix = view_->grabColorBar();
+    if (!cbPix.isNull())
+        cbImg = cbPix.scaled(int(cbPix.width() * scale), graph.height(),
+                             Qt::IgnoreAspectRatio, Qt::SmoothTransformation).toImage();
+
     // 上方加标题和时间/深度范围说明
     const int hdr = int(72 * scale);
-    QImage out(graph.width(), graph.height() + hdr, QImage::Format_RGB32);
+    QImage out(graph.width() + cbImg.width(), graph.height() + hdr, QImage::Format_RGB32);
     out.fill(Qt::white);
     QPainter p(&out);
     QFont f = font();
@@ -444,6 +444,8 @@ void MainWindow::exportImage()
                                               QDateTime::fromMSecsSinceEpoch(lastGrid_.tEnd).toString(kTimeFull)) + sub;
     p.drawText(QRect(0, int(hdr * 0.6), out.width(), int(hdr * 0.4)), Qt::AlignCenter, sub);
     p.drawImage(0, hdr, graph);
+    if (!cbImg.isNull())
+        p.drawImage(graph.width(), hdr, cbImg);
     p.end();
 
     if (out.save(path))
