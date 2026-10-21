@@ -12,9 +12,15 @@ Grid Resampler::run(const FrameBuffer *buf, ResampleParams p)
         return g;
 
     // ---- 时间箱：对齐到绝对时间网格 ----
-    const qint64 binMs  = std::max<qint64>(1, p.windowMs / p.rows);
+    // 时间箱宽度取帧间隔的整数倍（至少 1 个帧间隔）：每个箱里恰好有整数帧，
+    // 时间范围放得很大或很小都不会出现“空箱”。窗口很短时行数自动减少。
+    qint64 binMs = std::max<qint64>(1, p.windowMs / p.rows);
+    const qint64 dt = buf->frameIntervalMs();
+    if (dt > 0)
+        binMs = std::max<qint64>(dt, ((binMs + dt / 2) / dt) * dt);
+    const int maxRows = int(std::max<qint64>(2, p.windowMs / binMs));
     const qint64 tEndA  = (p.tEnd / binMs + 1) * binMs;
-    qint64       tStart = tEndA - qint64(p.rows) * binMs;
+    qint64       tStart = tEndA - qint64(maxRows) * binMs;
 
     const QVector<Frame> frames = buf->range(tStart, tEndA);
     if (frames.isEmpty())
@@ -22,7 +28,7 @@ Grid Resampler::run(const FrameBuffer *buf, ResampleParams p)
 
     // 数据还没填满窗口时，只显示有数据的那部分（不做假数据填充）
     const int firstBin = int((frames.first().tMs - tStart) / binMs);
-    const int rows     = p.rows - firstBin;
+    const int rows     = maxRows - firstBin;
     if (rows < 2)
         return g;
     tStart += qint64(firstBin) * binMs;

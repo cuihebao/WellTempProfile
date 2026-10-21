@@ -22,6 +22,7 @@ public:
 
     QVector<Frame> range(qint64 t0, qint64 t1) const;   // 取 [t0, t1) 内的帧
     bool  latestTime(qint64 *t) const;
+    qint64 frameIntervalMs() const;                      // 按最近若干帧估计帧间隔，不足两帧返回 0
     int   size() const;
     DepthInfo depth() const { return depth_; }
 

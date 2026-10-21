@@ -2,6 +2,7 @@
 #include "TimeAxisFormatter.h"
 #include <QVBoxLayout>
 #include <QLinearGradient>
+#include <QWheelEvent>
 #include <cmath>
 
 using namespace QtDataVisualization;
@@ -60,6 +61,9 @@ SurfaceView::SurfaceView(QWidget *parent)
     connect(series_, &QSurface3DSeries::selectedPointChanged,
             this, &SurfaceView::onSelectedPointChanged);
 
+    // 拦截滚轮：带 Shift/Ctrl 的滚轮用于缩放/平移数据范围，其余交给 Qt 默认的视角缩放
+    graph_->installEventFilter(this);
+
     applyConfig(cfg_);
 }
 
@@ -109,16 +113,61 @@ void SurfaceView::setGrid(const Grid &g)
     }
 
     proxy_->resetArray(arr);    // proxy 接管 arr
+
+    // 数据换了，原来的“第几行第几列”高亮已经对不上了：清掉高亮，
+    // 但保留 pickDepth_/pickTimeMs_ 作为缩放中心（界面上的读数文字也仍然正确）
+    ignoreSel_ = true;
+    series_->setSelectedPoint(QSurface3DSeries::invalidSelectionPosition());
+    ignoreSel_ = false;
+}
+
+QImage SurfaceView::renderImage(const QSize &size, int msaaSamples)
+{
+    return graph_->renderToImage(msaaSamples, size);
 }
 
 void SurfaceView::onSelectedPointChanged(const QPoint &p)
 {
     if (p == QSurface3DSeries::invalidSelectionPosition()) {
-        emit pointCleared();
+        if (!ignoreSel_) {
+            pickValid_ = false;
+            emit pointCleared();
+        }
         return;
     }
     const QSurfaceDataItem *it = proxy_->itemAt(p);
     if (!it)
         return;
-    emit pointPicked(it->x(), baseMs_ + qint64(double(it->z()) * 1000.0), it->y());
+    pickValid_  = true;
+    pickDepth_  = it->x();
+    pickTimeMs_ = baseMs_ + qint64(double(it->z()) * 1000.0);
+    emit pointPicked(pickDepth_, pickTimeMs_, it->y());
+}
+
+bool SurfaceView::eventFilter(QObject *obj, QEvent *ev)
+{
+    if (obj == graph_ && ev->type() == QEvent::Wheel) {
+        auto *we = static_cast<QWheelEvent *>(ev);
+        const Qt::KeyboardModifiers m = we->modifiers();
+        const bool shift = m & Qt::ShiftModifier;
+        const bool ctrl  = m & Qt::ControlModifier;
+        const bool alt   = m & Qt::AltModifier;
+        if (shift || ctrl) {
+            // 个别平台按住 Shift 滚轮会变成横向滚动，这里两个方向都取
+            int dy = we->angleDelta().y();
+            if (dy == 0)
+                dy = we->angleDelta().x();
+            if (dy != 0) {
+                const bool up = dy > 0;
+                if (alt)
+                    emit navRequested(ctrl ? NavAction::PanTime : NavAction::PanDepth,
+                                      up ? -0.2 : 0.2);          // 向上滚：向浅处/较早时间
+                else
+                    emit navRequested(ctrl ? NavAction::ZoomTime : NavAction::ZoomDepth,
+                                      up ? 0.8 : 1.25);          // 向上滚：放大（范围变小）
+            }
+            return true;                                         // 吃掉，不再触发视角缩放
+        }
+    }
+    return QWidget::eventFilter(obj, ev);
 }

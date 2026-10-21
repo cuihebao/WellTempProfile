@@ -55,3 +55,12 @@ int FrameBuffer::size() const
     QMutexLocker lock(&mutex_);
     return int(frames_.size());
 }
+
+qint64 FrameBuffer::frameIntervalMs() const
+{
+    QMutexLocker lock(&mutex_);
+    const size_t n = std::min<size_t>(frames_.size(), 16);
+    if (n < 2)
+        return 0;
+    return (frames_.back().tMs - frames_[frames_.size() - n].tMs) / qint64(n - 1);
+}

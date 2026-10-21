@@ -1,5 +1,6 @@
 #pragma once
 #include <QtDataVisualization/QValue3DAxisFormatter>
+#include <QObject>
 #include <QString>
 
 // 时间轴格式化器：轴上存的是“相对 baseMs 的秒数”（float 精度够用），

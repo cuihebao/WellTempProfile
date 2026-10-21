@@ -13,6 +13,7 @@ SOURCES += \
     TimeAxisFormatter.cpp \
     FrameBuffer.cpp \
     Resampler.cpp \
+    DataExporter.cpp \
     DataSimulator.cpp
 
 HEADERS += \
@@ -22,4 +23,5 @@ HEADERS += \
     TimeAxisFormatter.h \
     FrameBuffer.h \
     Resampler.h \
+    DataExporter.h \
     DataSimulator.h
