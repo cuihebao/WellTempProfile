@@ -10,7 +10,7 @@
 using namespace QtDataVisualization;
 
 SurfaceView::SurfaceView(QWidget *parent)
-    : QWidget(parent)
+    : ProfileView(parent)
 {
     graph_ = new Q3DSurface();
     QWidget *container = QWidget::createWindowContainer(graph_, this);
@@ -179,5 +179,5 @@ bool SurfaceView::eventFilter(QObject *obj, QEvent *ev)
             return true;                                         // 吃掉，不再触发视角缩放
         }
     }
-    return QWidget::eventFilter(obj, ev);
+    return ProfileView::eventFilter(obj, ev);
 }

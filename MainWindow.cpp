@@ -1,8 +1,13 @@
 #include "MainWindow.h"
 #include "DataSimulator.h"
+#include "SurfaceView.h"
+#include "HeatmapView.h"
+#include "SettingsDialog.h"
+#include "ConfigStore.h"
 #include "DataExporter.h"
 #include <QtConcurrent>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDateTime>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
@@ -14,6 +19,7 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStackedWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -26,25 +32,40 @@ QString stamp() { return QDateTime::currentDateTime().toString(QStringLiteral("y
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), buffer_(depth_)
 {
+    cfg_ = ConfigStore::load(cfg_);
+    cfg_.depthMin = depth_.start;
+    cfg_.depthMax = depth_.start + depth_.step * (depth_.count - 1);
     setWindowTitle(QObject::tr("注气井温度剖面"));
 
     // ================= 界面 =================
     auto *central = new QWidget(this);
     auto *vbox = new QVBoxLayout(central);
 
-    auto *title = new QLabel(cfg_.title, central);
-    title->setAlignment(Qt::AlignCenter);
-    QFont tf = title->font();
+    titleLabel_ = new QLabel(cfg_.title, central);
+    titleLabel_->setAlignment(Qt::AlignCenter);
+    QFont tf = titleLabel_->font();
     tf.setPointSize(16);
     tf.setBold(true);
-    title->setFont(tf);
-    vbox->addWidget(title);
+    titleLabel_->setFont(tf);
+    vbox->addWidget(titleLabel_);
 
-    view_ = new SurfaceView(central);
-    vbox->addWidget(view_, 1);
+    // 3D 曲面和 2D 热力图叠放，下拉框切换；只有当前可见的那个会收到新数据
+    stack_  = new QStackedWidget(central);
+    view3d_ = new SurfaceView(stack_);
+    view2d_ = new HeatmapView(stack_);
+    stack_->addWidget(view3d_);
+    stack_->addWidget(view2d_);
+    view_ = view3d_;
+    vbox->addWidget(stack_, 1);
 
     // ---- 控制行 ----
     auto *bar = new QHBoxLayout;
+    bar->addWidget(new QLabel(QObject::tr("视图:"), central));
+    modeCombo_ = new QComboBox(central);
+    modeCombo_->addItem(QObject::tr("3D 曲面"));
+    modeCombo_->addItem(QObject::tr("2D 热力图"));
+    bar->addWidget(modeCombo_);
+    bar->addSpacing(16);
     bar->addWidget(new QLabel(QObject::tr("时间窗口(秒):"), central));
     windowSpin_ = new QSpinBox(central);
     windowSpin_->setRange(20, int(cfg_.maxRetainSec * 0.8));     // 保证 1.25×窗口 ≤ 保留上限
@@ -78,9 +99,11 @@ MainWindow::MainWindow(QWidget *parent)
     bar->addWidget(resetDepthBtn);
 
     bar->addSpacing(16);
-    auto *colorBarChk = new QCheckBox(QObject::tr("显示色带"), central);
-    colorBarChk->setChecked(cfg_.showColorBar);
-    bar->addWidget(colorBarChk);
+    colorBarChk_ = new QCheckBox(QObject::tr("显示色带"), central);
+    colorBarChk_->setChecked(cfg_.showColorBar);
+    bar->addWidget(colorBarChk_);
+    auto *settingsBtn = new QPushButton(QObject::tr("设置…"), central);
+    bar->addWidget(settingsBtn);
 
     bar->addStretch(1);
     auto *imgBtn = new QPushButton(QObject::tr("导出图片"), central);
@@ -95,12 +118,12 @@ MainWindow::MainWindow(QWidget *parent)
     bar->addWidget(dataBtn);
     vbox->addLayout(bar);
 
-    pickLabel_ = new QLabel(QObject::tr("点击曲面上的点查看数值"), central);
+    pickLabel_ = new QLabel(QObject::tr("点击图上的点查看数值"), central);
     vbox->addWidget(pickLabel_);
 
     auto *hint = new QLabel(QObject::tr(
         "左键拖动：旋转　滚轮：缩放视角　Shift+滚轮：缩放井深范围　Ctrl+滚轮：缩放时间范围　"
-        "范围缩放以最近点选的点为中心；要移动范围请用上方井深输入框，或取消“跟随最新”后缩放时间"), central);
+        "范围缩放以最近点选的点为中心；要移动范围请用上方井深输入框，或取消“跟随最新”后缩放时间　2D 热力图：悬停读数，左键点选，右键取消，缩放以鼠标位置为中心"), central);
     hint->setStyleSheet(QStringLiteral("color: gray;"));
     hint->setWordWrap(true);
     vbox->addWidget(hint);
@@ -115,8 +138,10 @@ MainWindow::MainWindow(QWidget *parent)
     // 时间轴基准：取当前整点，保证轴上的数值很小，float 精度够用
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     baseMs_ = now - now % 3600000;
-    view_->setBaseTimeMs(baseMs_);
-    view_->applyConfig(cfg_);
+    for (ProfileView *v : {static_cast<ProfileView *>(view3d_), static_cast<ProfileView *>(view2d_)}) {
+        v->setBaseTimeMs(baseMs_);
+        v->applyConfig(cfg_);
+    }
 
     updateRetention();
     // 研发阶段用模拟器（真实数据接入时，改为调用 buffer_.append()）
@@ -140,16 +165,22 @@ MainWindow::MainWindow(QWidget *parent)
     connect(resetDepthBtn, &QPushButton::clicked, this, &MainWindow::onResetDepth);
     connect(followBtn_, &QPushButton::toggled, this, &MainWindow::onFollowToggled);
     connect(imgBtn, &QPushButton::clicked, this, &MainWindow::exportImage);
-    connect(colorBarChk, &QCheckBox::toggled, this, [this](bool on) {
+    connect(colorBarChk_, &QCheckBox::toggled, this, [this](bool on) {
         cfg_.showColorBar = on;
-        view_->setColorBarVisible(on);
+        view3d_->setColorBarVisible(on);
+        view2d_->setColorBarVisible(on);
+        ConfigStore::save(cfg_);
     });
+    connect(settingsBtn, &QPushButton::clicked, this, &MainWindow::openSettings);
+    connect(modeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onViewModeChanged);
 
-    connect(view_, &SurfaceView::navRequested, this, &MainWindow::onNavRequested);
-    connect(view_, &SurfaceView::pointPicked, this, &MainWindow::onPointPicked);
-    connect(view_, &SurfaceView::pointCleared, this, [this] {
-        pickLabel_->setText(QObject::tr("点击曲面上的点查看数值"));
-    });
+    for (ProfileView *v : {static_cast<ProfileView *>(view3d_), static_cast<ProfileView *>(view2d_)}) {
+        connect(v, &ProfileView::navRequested, this, &MainWindow::onNavRequested);
+        connect(v, &ProfileView::pointPicked, this, &MainWindow::onPointPicked);
+        connect(v, &ProfileView::pointCleared, this, [this] {
+            pickLabel_->setText(QObject::tr("点击图上的点查看数值"));
+        });
+    }
 
     refreshTimer_.start();
     QTimer::singleShot(0, this, &MainWindow::requestResample);
@@ -382,11 +413,11 @@ void MainWindow::syncFollowButton()
     followBtn_->setChecked(follow_);
 }
 
-void MainWindow::onNavRequested(SurfaceView::NavAction a, double amount)
+void MainWindow::onNavRequested(NavAction a, double amount)
 {
     switch (a) {
-    case SurfaceView::NavAction::ZoomDepth: zoomDepth(amount); break;
-    case SurfaceView::NavAction::ZoomTime:  zoomTime(amount);  break;
+    case NavAction::ZoomDepth: zoomDepth(amount); break;
+    case NavAction::ZoomTime:  zoomTime(amount);  break;
     }
 }
 
@@ -504,4 +535,52 @@ void MainWindow::onExportFinished()
         statusLabel_->setText(QObject::tr("数据已导出：%1").arg(lastExportPath_));
     else
         QMessageBox::warning(this, QObject::tr("导出数据"), err);
+}
+
+// ====================== 视图切换与设置 ======================
+
+void MainWindow::onViewModeChanged(int index)
+{
+    view_ = (index == 0) ? static_cast<ProfileView *>(view3d_) : static_cast<ProfileView *>(view2d_);
+    stack_->setCurrentIndex(index);
+    if (!lastGrid_.isEmpty())
+        view_->setGrid(lastGrid_);          // 隐藏期间没有收到新数据，切回来时补上最新的一份
+}
+
+void MainWindow::openSettings()
+{
+    SettingsDialog dlg(cfg_, this);
+    connect(&dlg, &SettingsDialog::applied, this, [this](const ViewConfig &c) { applyConfig(c); });
+    if (dlg.exec() == QDialog::Accepted)
+        applyConfig(dlg.config());
+}
+
+void MainWindow::applyConfig(const ViewConfig &c)
+{
+    const bool windowChanged = (c.windowSec != cfg_.windowSec);
+
+    ViewConfig n = c;
+    n.depthMin = cfg_.depthMin;             // 井深查看范围属于视图状态，不由设置面板修改
+    n.depthMax = cfg_.depthMax;
+    cfg_ = n;
+
+    titleLabel_->setText(cfg_.title);
+    view3d_->applyConfig(cfg_);
+    view2d_->applyConfig(cfg_);
+    refreshTimer_.setInterval(cfg_.refreshMs);
+    {
+        QSignalBlocker b(windowSpin_);
+        windowSpin_->setValue(cfg_.windowSec);
+    }
+    {
+        QSignalBlocker b(colorBarChk_);
+        colorBarChk_->setChecked(cfg_.showColorBar);
+    }
+    if (windowChanged) {                    // 改了窗口长度 = 回到“最近 N 秒”的滚动模式
+        follow_ = true;
+        syncFollowButton();
+    }
+    updateRetention();
+    scheduleResample();
+    ConfigStore::save(cfg_);
 }

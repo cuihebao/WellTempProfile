@@ -2,13 +2,18 @@
 #include "Config.h"
 #include "FrameBuffer.h"
 #include "Resampler.h"
-#include "SurfaceView.h"
+#include "ProfileView.h"
 #include <QMainWindow>
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QFutureWatcher>
 
 class DataSimulator;
+class SurfaceView;
+class HeatmapView;
+class QStackedWidget;
+class QComboBox;
+class QCheckBox;
 class QLabel;
 class QSpinBox;
 class QDoubleSpinBox;
@@ -27,8 +32,10 @@ private slots:
     void onDepthSpinChanged();
     void onResetDepth();
     void onFollowToggled(bool on);
-    void onNavRequested(SurfaceView::NavAction action, double amount);
+    void onNavRequested(NavAction action, double amount);
     void onPointPicked(double depth, qint64 timeMs, double temp);
+    void onViewModeChanged(int index);
+    void openSettings();
 
     void exportImage();
     void exportGridCsv();
@@ -49,6 +56,7 @@ private:
     void applyTimeRange(qint64 t0, qint64 t1);
     void zoomTime(double factor);
 
+    void applyConfig(const ViewConfig &c);     // 应用并保存配置（设置面板调用）
     void updateRetention();
     void syncFollowButton();
     void updateStatus(qint64 resampleMs);
@@ -64,7 +72,13 @@ private:
     Grid        lastGrid_;       // 最近一次显示的网格（导出用）
     bool        pending_  = false;
 
-    SurfaceView    *view_;
+    ProfileView    *view_;          // 当前显示的视图（view3d_ 或 view2d_）
+    SurfaceView    *view3d_;
+    HeatmapView    *view2d_;
+    QStackedWidget *stack_;
+    QComboBox      *modeCombo_;
+    QLabel         *titleLabel_;
+    QCheckBox      *colorBarChk_;
     DataSimulator  *sim_;
     QLabel         *pickLabel_;
     QLabel         *statusLabel_;

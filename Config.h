@@ -3,14 +3,17 @@
 #include <QString>
 #include <QtGlobal>
 
+// 视图范围导航动作（3D 曲面和 2D 热力图共用）
+enum class NavAction { ZoomDepth, ZoomTime };
+
 // 降采样聚合方式
 enum class AggMode { Mean, Max, Min };
 
 // 原始数据的深度坐标描述：每帧 count 个点，从 start 开始，间隔 step（单位 m）
 struct DepthInfo {
-    double start = 1500.0;
+    double start = 0.0;
     double step  = 0.4;
-    int    count = 5001;      // 1500 ~ 3500 m
+    int    count = 5000;
 };
 
 // 显示相关的所有可配置项（后续配置面板直接读写这个结构）

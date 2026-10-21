@@ -27,21 +27,12 @@ void ColorBar::setTitle(const QString &title)
     update();
 }
 
-// 取 1/2/5×10^n 的“好看”刻度间隔
-static double niceStep(double raw)
-{
-    const double p = std::pow(10.0, std::floor(std::log10(raw)));
-    const double f = raw / p;
-    const double n = f < 1.5 ? 1.0 : f < 3.0 ? 2.0 : f < 7.0 ? 5.0 : 10.0;
-    return n * p;
-}
-
 void ColorBar::paintEvent(QPaintEvent *)
 {
     if (hi_ <= lo_)
         return;
 
-    const int top = 5, bottom = 5, left = 8, barW = 18;
+    const int top = 44, bottom = 56, left = 8, barW = 18;
     const QRect bar(left, top, barW, height() - top - bottom);
     if (bar.height() < 20)
         return;

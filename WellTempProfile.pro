@@ -15,6 +15,9 @@ SOURCES += \
     Resampler.cpp \
     DataExporter.cpp \
     ColorBar.cpp \
+    HeatmapView.cpp \
+    SettingsDialog.cpp \
+    ConfigStore.cpp \
     DataSimulator.cpp
 
 HEADERS += \
@@ -26,5 +29,9 @@ HEADERS += \
     Resampler.h \
     DataExporter.h \
     ColorBar.h \
+    ProfileView.h \
+    HeatmapView.h \
+    SettingsDialog.h \
+    ConfigStore.h \
     ColorMap.h \
     DataSimulator.h
