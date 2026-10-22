@@ -1,4 +1,5 @@
 #pragma once
+#include <QMetaType>
 #include <QObject>
 #include <QString>
 #include <QtGlobal>
@@ -13,8 +14,9 @@ enum class AggMode { Mean, Max, Min };
 struct DepthInfo {
     double start = 0.0;
     double step  = 0.4;
-    int    count = 5000;
+    int    count = 5001;      // 1500 ~ 3500 m
 };
+Q_DECLARE_METATYPE(DepthInfo)
 
 // 显示相关的所有可配置项（后续配置面板直接读写这个结构）
 struct ViewConfig {
@@ -23,6 +25,8 @@ struct ViewConfig {
     QString tempTitle  = QObject::tr("温度/℃");
     QString timeTitle  = QObject::tr("时间");
     QString timeFormat = QObject::tr("HH:mm:ss");
+
+    double depthStart = 0.0;    // 真实数据每帧第 0 个点对应的井深（m）；步长和点数由数据自带
 
     int    windowSec = 600;     // 时间窗口（秒）
     int    refreshMs = 5000;    // 界面刷新周期（毫秒），独立于 2 秒的数据周期

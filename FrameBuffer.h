@@ -24,7 +24,8 @@ public:
     bool  latestTime(qint64 *t) const;
     qint64 frameIntervalMs() const;                      // 按最近若干帧估计帧间隔，不足两帧返回 0
     int   size() const;
-    DepthInfo depth() const { return depth_; }
+    DepthInfo depth() const;
+    void reset(const DepthInfo &d);                      // 深度结构变化：清空已有帧并采用新的结构
 
 private:
     void trimLocked();

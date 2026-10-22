@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "DataSimulator.h"
+#include "DataIngest.h"
 #include "SurfaceView.h"
 #include "HeatmapView.h"
 #include "SettingsDialog.h"
@@ -33,8 +34,6 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), buffer_(depth_)
 {
     cfg_ = ConfigStore::load(cfg_);
-    cfg_.depthMin = depth_.start;
-    cfg_.depthMax = depth_.start + depth_.step * (depth_.count - 1);
     setWindowTitle(QObject::tr("注气井温度剖面"));
 
     // ================= 界面 =================
@@ -144,10 +143,18 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     updateRetention();
-    // 研发阶段用模拟器（真实数据接入时，改为调用 buffer_.append()）
+
+    // 真实数据入口。第一帧到达时会按数据自带的点数/点间隔重置缓冲，并通过 depthInfoChanged 通知界面
+    qRegisterMetaType<DepthInfo>("DepthInfo");
+    ingest_ = new DataIngest(&buffer_, cfg_.depthStart, this);
+    connect(ingest_, &DataIngest::depthInfoChanged, this, &MainWindow::onDepthInfoChanged);
+
+#ifdef USE_SIMULATOR
+    // 研发阶段用模拟器（接入真实数据时在 .pro 里注释掉 DEFINES += USE_SIMULATOR）
     sim_ = new DataSimulator(&buffer_, this);
     sim_->prefill(cfg_.windowSec);
     sim_->start(2000, 2000);        // 调试加速：sim_->start(200, 2000) 即 10 倍速
+#endif
 
     // ================= 信号 =================
     refreshTimer_.setInterval(cfg_.refreshMs);
@@ -184,6 +191,20 @@ MainWindow::MainWindow(QWidget *parent)
 
     refreshTimer_.start();
     QTimer::singleShot(0, this, &MainWindow::requestResample);
+
+//    for(int i = 0;i< 100;i++)
+//    {
+//        QTimer::singleShot(i*1000, [this]()
+//        {
+//            QVector<float>temp;
+//            for(int i = 0;i< 5000;i++)
+//            {
+//                temp.append(i);
+//            }
+//            qint64 tsMs = QDateTime::currentMSecsSinceEpoch();
+//            ingest()->pushFrameMs(temp,tsMs,0.2);
+//        });
+//    }
 }
 
 // ====================== 重采样调度 ======================
@@ -567,6 +588,7 @@ void MainWindow::applyConfig(const ViewConfig &c)
     titleLabel_->setText(cfg_.title);
     view3d_->applyConfig(cfg_);
     view2d_->applyConfig(cfg_);
+    ingest_->setStartDepth(cfg_.depthStart);
     refreshTimer_.setInterval(cfg_.refreshMs);
     {
         QSignalBlocker b(windowSpin_);
@@ -583,4 +605,16 @@ void MainWindow::applyConfig(const ViewConfig &c)
     updateRetention();
     scheduleResample();
     ConfigStore::save(cfg_);
+}
+
+// 真实数据的深度结构（起始井深/点间隔/点数）确定或变化：更新井深范围，旧数据已被缓冲清空
+void MainWindow::onDepthInfoChanged(DepthInfo info)
+{
+    depth_ = info;
+    for (QDoubleSpinBox *sp : {depthMinSpin_, depthMaxSpin_}) {
+        QSignalBlocker b(sp);
+        sp->setRange(depth_.start, fullDepthMax());
+    }
+    lastGrid_ = Grid();
+    applyDepthRange(depth_.start, fullDepthMax());      // 查看范围重置为整段井深，并同步输入框、触发重采样
 }

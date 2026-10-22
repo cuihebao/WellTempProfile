@@ -64,3 +64,16 @@ qint64 FrameBuffer::frameIntervalMs() const
         return 0;
     return (frames_.back().tMs - frames_[frames_.size() - n].tMs) / qint64(n - 1);
 }
+
+DepthInfo FrameBuffer::depth() const
+{
+    QMutexLocker lock(&mutex_);
+    return depth_;
+}
+
+void FrameBuffer::reset(const DepthInfo &d)
+{
+    QMutexLocker lock(&mutex_);
+    frames_.clear();
+    depth_ = d;
+}

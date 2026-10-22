@@ -9,6 +9,7 @@
 #include <QFutureWatcher>
 
 class DataSimulator;
+class DataIngest;
 class SurfaceView;
 class HeatmapView;
 class QStackedWidget;
@@ -25,6 +26,9 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
 
+    // 真实数据入口：设备/网络层拿到一帧后调用 ingest()->pushFrameMs(...) 即可（线程安全）
+    DataIngest *ingest() const { return ingest_; }
+
 private slots:
     void onPeriodicRefresh();
     void onResampleFinished();
@@ -36,6 +40,7 @@ private slots:
     void onPointPicked(double depth, qint64 timeMs, double temp);
     void onViewModeChanged(int index);
     void openSettings();
+    void onDepthInfoChanged(DepthInfo info);
 
     void exportImage();
     void exportGridCsv();
@@ -79,7 +84,8 @@ private:
     QComboBox      *modeCombo_;
     QLabel         *titleLabel_;
     QCheckBox      *colorBarChk_;
-    DataSimulator  *sim_;
+    DataSimulator  *sim_ = nullptr;
+    DataIngest     *ingest_ = nullptr;
     QLabel         *pickLabel_;
     QLabel         *statusLabel_;
     QSpinBox       *windowSpin_;

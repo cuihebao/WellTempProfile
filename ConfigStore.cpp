@@ -21,6 +21,7 @@ ViewConfig ConfigStore::load(const ViewConfig &d)
     if (c.timeFormat.isEmpty())
         c.timeFormat = d.timeFormat;
 
+    c.depthStart   = s.value(QStringLiteral("depthStart"),   d.depthStart).toDouble();
     c.windowSec    = qBound(20,   s.value(QStringLiteral("windowSec"),    d.windowSec).toInt(),    int(d.maxRetainSec * 0.8));
     c.refreshMs    = qBound(500,  s.value(QStringLiteral("refreshMs"),    d.refreshMs).toInt(),    60000);
     c.maxRows      = qBound(20,   s.value(QStringLiteral("maxRows"),      d.maxRows).toInt(),      1000);
@@ -45,6 +46,7 @@ void ConfigStore::save(const ViewConfig &c)
     s.setValue(QStringLiteral("tempTitle"),  c.tempTitle);
     s.setValue(QStringLiteral("timeTitle"),  c.timeTitle);
     s.setValue(QStringLiteral("timeFormat"), c.timeFormat);
+    s.setValue(QStringLiteral("depthStart"), c.depthStart);
     s.setValue(QStringLiteral("windowSec"),  c.windowSec);
     s.setValue(QStringLiteral("refreshMs"),  c.refreshMs);
     s.setValue(QStringLiteral("maxRows"),    c.maxRows);

@@ -41,6 +41,6 @@ private:
     QComboBox      *agg_;
     QLabel         *info_;
     QCheckBox      *autoTemp_, *showColorBar_;
-    QDoubleSpinBox *tempMin_, *tempMax_;
+    QDoubleSpinBox *tempMin_, *tempMax_, *depthStart_;
     QDialogButtonBox *buttons_;
 };

@@ -35,6 +35,11 @@ SettingsDialog::SettingsDialog(const ViewConfig &cfg, QWidget *parent)
     // ---- 数据与刷新 ----
     auto *gData = new QGroupBox(QObject::tr("数据与刷新"), this);
     auto *fData = new QFormLayout(gData);
+    depthStart_ = new QDoubleSpinBox(gData);
+    depthStart_->setRange(-10000.0, 100000.0);
+    depthStart_->setDecimals(2);
+    depthStart_->setSuffix(QObject::tr(" m"));
+    depthStart_->setToolTip(QObject::tr("真实数据每帧第 0 个点对应的井深。修改后下一帧到达时会清空已缓存的数据。"));
     windowSec_ = new QSpinBox(gData);
     windowSec_->setRange(20, int(base_.maxRetainSec * 0.8));
     windowSec_->setSuffix(QObject::tr(" 秒"));
@@ -52,6 +57,7 @@ SettingsDialog::SettingsDialog(const ViewConfig &cfg, QWidget *parent)
     agg_->addItem(QObject::tr("最小值（保留低温尖峰）"));
     info_ = new QLabel(gData);
     info_->setWordWrap(true);
+    fData->addRow(QObject::tr("起始井深（第 0 个点）"), depthStart_);
     fData->addRow(QObject::tr("时间窗口"), windowSec_);
     fData->addRow(QObject::tr("刷新周期"), refreshMs_);
     fData->addRow(QObject::tr("网格最大行数（时间方向）"), maxRows_);
@@ -111,6 +117,7 @@ void SettingsDialog::load(const ViewConfig &c)
     tempTitle_->setText(c.tempTitle);
     timeTitle_->setText(c.timeTitle);
     timeFormat_->setText(c.timeFormat);
+    depthStart_->setValue(c.depthStart);
     windowSec_->setValue(c.windowSec);
     refreshMs_->setValue(c.refreshMs);
     maxRows_->setValue(c.maxRows);
@@ -133,6 +140,7 @@ ViewConfig SettingsDialog::config() const
     c.tempTitle  = tempTitle_->text();
     c.timeTitle  = timeTitle_->text();
     c.timeFormat = timeFormat_->text().trimmed().isEmpty() ? ViewConfig().timeFormat : timeFormat_->text();
+    c.depthStart = depthStart_->value();
     c.windowSec  = windowSec_->value();
     c.refreshMs  = refreshMs_->value();
     c.maxRows    = maxRows_->value();
