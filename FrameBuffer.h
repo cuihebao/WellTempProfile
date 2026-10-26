@@ -17,7 +17,7 @@ class FrameBuffer
 public:
     explicit FrameBuffer(const DepthInfo &depth, qint64 retainMs = 15 * 60 * 1000);
 
-    void append(const Frame &f);
+    bool append(const Frame &f);        // 时间戳必须严格大于缓冲里最新一帧，否则丢弃并返回 false
     void setRetainMs(qint64 ms);
 
     QVector<Frame> range(qint64 t0, qint64 t1) const;   // 取 [t0, t1) 内的帧

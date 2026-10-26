@@ -43,6 +43,7 @@ private:
     QImage      img_;
     ColorBar   *colorBar_;
     double      lo_ = -20, hi_ = 60;              // 当前颜色映射范围
+    double      tMin_ = 0, tMax_ = 1;             // 纵轴时间范围（毫秒）：首/末行各向外延半个行距
     QPoint      hover_;
     bool        hoverValid_ = false;
     bool        rendering_  = false;              // 导出渲染时不画悬停框

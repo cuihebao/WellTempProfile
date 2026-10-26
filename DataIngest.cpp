@@ -87,7 +87,8 @@ bool DataIngest::pushFrameMs(const QVector<float> &temp, qint64 tsMs, double res
     Frame f;
     f.tMs = tsMs;
     f.v   = v;
-    buf_->append(f);
+    if (!buf_->append(f))
+        return reject("时间戳不比缓冲中最新一帧大（是否还有别的数据源在写入？例如模拟器没关）");
     accepted_.fetchAndAddRelaxed(1);
     return true;
 }

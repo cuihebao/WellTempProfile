@@ -191,20 +191,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     refreshTimer_.start();
     QTimer::singleShot(0, this, &MainWindow::requestResample);
-
-//    for(int i = 0;i< 100;i++)
-//    {
-//        QTimer::singleShot(i*1000, [this]()
-//        {
-//            QVector<float>temp;
-//            for(int i = 0;i< 5000;i++)
-//            {
-//                temp.append(i);
-//            }
-//            qint64 tsMs = QDateTime::currentMSecsSinceEpoch();
-//            ingest()->pushFrameMs(temp,tsMs,0.2);
-//        });
-//    }
 }
 
 // ====================== 重采样调度 ======================

@@ -68,6 +68,13 @@ void HeatmapView::setColorBarVisible(bool visible)
 void HeatmapView::setGrid(const Grid &g)
 {
     grid_ = g;
+    if (!grid_.isEmpty()) {
+        const int n = grid_.rows;
+        const double firstHalf = 0.5 * double(grid_.times[1] - grid_.times[0]);
+        const double lastHalf  = 0.5 * double(grid_.times[n - 1] - grid_.times[n - 2]);
+        tMin_ = double(grid_.times.first()) - firstHalf;
+        tMax_ = double(grid_.times.last())  + lastHalf;
+    }
     updateRange();
     rebuildImage();
     update();
@@ -126,7 +133,14 @@ bool HeatmapView::cellAt(const QPoint &pos, int *row, int *col) const
     const double fx = double(pos.x() - pr.left()) / pr.width();
     const double fy = double(pos.y() - pr.top())  / pr.height();
     *col = std::min(grid_.cols - 1, std::max(0, int(std::lround(fx * (grid_.cols - 1)))));
-    *row = std::min(grid_.rows - 1, std::max(0, int(std::lround(fy * (grid_.rows - 1)))));
+
+    // 行按时间定位：每行占据以自己时间戳为中心的一段（帧间隔不均匀时行高不同）
+    const qint64 t = qint64(tMin_ + fy * (tMax_ - tMin_));
+    auto it = std::lower_bound(grid_.times.constBegin(), grid_.times.constEnd(), t);
+    int r = int(it - grid_.times.constBegin());
+    if (r >= grid_.rows) r = grid_.rows - 1;
+    else if (r > 0 && (t - grid_.times[r - 1]) < (grid_.times[r] - t)) --r;
+    *row = r;
     return true;
 }
 
@@ -134,9 +148,8 @@ QPointF HeatmapView::toPixel(double depth, qint64 timeMs) const
 {
     const QRect pr = plotRect();
     const double d0 = grid_.depths.first(), d1 = grid_.depths.last();
-    const double t0 = double(grid_.times.first()), t1 = double(grid_.times.last());
     return QPointF(pr.left() + (depth - d0) / (d1 - d0) * pr.width(),
-                   pr.top()  + (double(timeMs) - t0) / (t1 - t0) * pr.height());
+                   pr.top()  + (double(timeMs) - tMin_) / (tMax_ - tMin_) * pr.height());
 }
 
 bool HeatmapView::pickAt(const QPoint &pos)
@@ -213,12 +226,22 @@ void HeatmapView::paintEvent(QPaintEvent *)
         return;
     }
 
-    p.setRenderHint(QPainter::SmoothPixmapTransform, true);
-    p.drawImage(pr, img_);
+    // 每一行按自己的时间区间画成一条横带：行与行之间的分界取相邻两帧的中点，
+    // 所以帧间隔不均匀（如 7~9 秒）或有数据中断时，图上的时间位置依然是准确的
+    p.setRenderHint(QPainter::SmoothPixmapTransform, false);
+    for (int r = 0; r < grid_.rows; ++r) {
+        const double tLo = (r == 0) ? tMin_ : 0.5 * double(grid_.times[r - 1] + grid_.times[r]);
+        const double tHi = (r == grid_.rows - 1) ? tMax_ : 0.5 * double(grid_.times[r] + grid_.times[r + 1]);
+        const int y0 = int(std::lround(pr.top() + (tLo - tMin_) / (tMax_ - tMin_) * pr.height()));
+        const int y1 = int(std::lround(pr.top() + (tHi - tMin_) / (tMax_ - tMin_) * pr.height()));
+        if (y1 <= y0)
+            continue;
+        p.drawImage(QRect(pr.left(), y0, pr.width(), y1 - y0), img_, QRect(0, r, grid_.cols, 1));
+    }
     p.drawRect(pr);
 
     const double d0 = grid_.depths.first(), d1 = grid_.depths.last();
-    const qint64 t0 = grid_.times.first(),  t1 = grid_.times.last();
+    const qint64 t0 = qint64(tMin_), t1 = qint64(tMax_);
 
     // ---- 井深刻度（下方）----
     const double dStep = niceStep((d1 - d0) / 8.0);

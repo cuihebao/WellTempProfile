@@ -7,11 +7,15 @@ FrameBuffer::FrameBuffer(const DepthInfo &depth, qint64 retainMs)
 {
 }
 
-void FrameBuffer::append(const Frame &f)
+bool FrameBuffer::append(const Frame &f)
 {
     QMutexLocker lock(&mutex_);
+    // 缓冲按时间递增存放，range() 的二分查找依赖这一点；乱序/重复的帧直接丢弃
+    if (!frames_.empty() && f.tMs <= frames_.back().tMs)
+        return false;
     frames_.push_back(f);
     trimLocked();
+    return true;
 }
 
 void FrameBuffer::setRetainMs(qint64 ms)
